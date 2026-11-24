@@ -18,3 +18,4 @@ Double-click index.html to launch it in any modern browser.
 Frontend: Standard HTML5, CSS3, JavaScript (ES6+)
 Mapping: Leaflet.js v1.9.4
 Services: OSRM Routing, OpenStreetMap Nominatim Search, Esri Imagery
+
