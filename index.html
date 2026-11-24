@@ -1,0 +1,1810 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cordillera Real-Time GPS & Hazard Map (CAR)</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --secondary-color: #0284c7;
+            --cyan-gps: #00e5ff;
+            --background-color: #090e1a;
+            --surface-color: #131c31;
+            --surface-elevated: #1c2842;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --border-color: #2a3958;
+            --font-family-base: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+
+            --critical-bg: rgba(220, 38, 38, 0.22);
+            --critical-border: #ef4444;
+            --critical-text: #fecaca;
+
+            --accident-bg: rgba(234, 88, 12, 0.22);
+            --accident-border: #f97316;
+            --accident-text: #fed7aa;
+
+            --danger-bg: rgba(225, 29, 72, 0.18);
+            --danger-border: #f43f5e;
+            --danger-text: #fda4af;
+
+            --warning-bg: rgba(217, 119, 6, 0.2);
+            --warning-border: #f59e0b;
+            --warning-text: #fde68a;
+
+            --success-bg: rgba(16, 185, 129, 0.16);
+            --success-border: #10b981;
+            --success-text: #6ee7b7;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--font-family-base);
+            background-color: var(--background-color);
+            color: var(--text-primary);
+            padding: 1rem;
+            max-width: 1340px;
+            margin: 0 auto;
+            overflow-x: hidden;
+        }
+
+        header {
+            background: linear-gradient(135deg, #1d4ed8 0%, #0f172a 100%);
+            padding: 1rem 1.25rem;
+            border-radius: 16px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.85rem;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.9rem;
+            border: 1px solid rgba(56, 189, 248, 0.25);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+        }
+
+        .header-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.85rem;
+        }
+
+        .app-logo {
+            width: 46px;
+            height: 46px;
+            background: linear-gradient(135deg, #00e5ff, #2563eb);
+            border-radius: 13px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.45rem;
+            box-shadow: 0 0 16px rgba(0, 229, 255, 0.4);
+            flex-shrink: 0;
+        }
+
+        .header-brand h1 {
+            font-size: 1.22rem;
+            font-weight: 800;
+        }
+
+        .header-brand p {
+            font-size: 0.78rem;
+            color: #bae6fd;
+            margin-top: 0.12rem;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 0.45rem;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            border: none;
+            padding: 0.48rem 0.82rem;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 700;
+            font-size: 0.78rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            transition: all 0.15s ease;
+        }
+
+        .btn-gps {
+            background: linear-gradient(135deg, #00b4d8, #0077b6);
+            color: #fff;
+        }
+        .btn-danger { background-color: #dc2626; color: #fff; }
+        .btn-secondary {
+            background-color: rgba(15, 23, 42, 0.85);
+            color: var(--text-primary);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+        }
+        .btn-sound-active {
+            background-color: #d97706;
+            color: #fff;
+            border: 1px solid #fbbf24;
+        }
+
+        .workspace-grid {
+            display: grid;
+            grid-template-columns: 1.25fr 0.75fr;
+            gap: 1rem;
+            align-items: start;
+        }
+
+        @media (max-width: 980px) {
+            .workspace-grid { grid-template-columns: 1fr; }
+        }
+
+        .map-panel {
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+        }
+
+        .gps-planner-bar {
+            background: var(--surface-elevated);
+            padding: 0.8rem 0.95rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            gap: 0.55rem;
+        }
+
+        .planner-title {
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+            font-size: 0.76rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            color: var(--cyan-gps);
+        }
+
+        .mode-selector-bar {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0.4rem;
+        }
+
+        @media (max-width: 560px) {
+            .mode-selector-bar { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        .mode-btn {
+            background: var(--surface-color);
+            color: var(--text-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 9px;
+            padding: 0.45rem 0.55rem;
+            font-size: 0.76rem;
+            font-weight: 700;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.3rem;
+            transition: all 0.15s ease;
+        }
+
+        .mode-btn.active {
+            background: linear-gradient(135deg, #2563eb, #0284c7);
+            color: #ffffff;
+            border-color: var(--cyan-gps);
+        }
+
+        .planner-inputs {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr auto;
+            gap: 0.45rem;
+            align-items: center;
+        }
+
+        @media (max-width: 720px) {
+            .planner-inputs { grid-template-columns: 1fr; }
+        }
+
+        .planner-select {
+            background: var(--surface-color);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 0.46rem 0.6rem;
+            font-size: 0.8rem;
+            font-weight: 600;
+            width: 100%;
+        }
+
+        .gps-telemetry-strip {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.5rem;
+            background: rgba(9, 14, 26, 0.75);
+            border: 1px solid rgba(56, 189, 248, 0.25);
+            border-radius: 8px;
+            padding: 0.42rem 0.68rem;
+            font-size: 0.74rem;
+        }
+
+        .gps-status-group {
+            display: flex;
+            align-items: center;
+            gap: 0.45rem;
+            font-weight: 700;
+            color: #7dd3fc;
+        }
+
+        .gps-dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: #38bdf8;
+            box-shadow: 0 0 8px #38bdf8;
+        }
+
+        .gps-dot.sim {
+            background: #fbbf24;
+            box-shadow: 0 0 8px #fbbf24;
+        }
+
+        .sim-controls {
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            flex-wrap: wrap;
+        }
+
+        .mini-select {
+            background: var(--surface-color);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 0.24rem 0.45rem;
+            font-size: 0.72rem;
+            font-weight: 600;
+        }
+
+        .map-viewport {
+            position: relative;
+            width: 100%;
+            height: 510px;
+            background: #1a2433;
+        }
+
+        #real-map {
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            background: #1a2433;
+        }
+
+        .leaflet-container {
+            font-family: var(--font-family-base);
+        }
+
+        .gps-arrow-marker {
+            background: transparent;
+            border: none;
+        }
+
+        .gps-arrow-rotator {
+            width: 44px;
+            height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.22s ease-out;
+            filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.75));
+        }
+
+        .gps-arrow-svg {
+            width: 40px;
+            height: 40px;
+            overflow: visible;
+        }
+
+        .nav-hud-top {
+            position: absolute;
+            top: 0.7rem;
+            left: 0.7rem;
+            right: 0.7rem;
+            background: rgba(11, 20, 38, 0.94);
+            border: 1.5px solid var(--cyan-gps);
+            border-radius: 12px;
+            padding: 0.65rem 0.9rem;
+            display: none;
+            align-items: center;
+            gap: 0.75rem;
+            z-index: 500;
+        }
+
+        .nav-hud-top.active { display: flex; }
+
+        .nav-hud-bottom {
+            position: absolute;
+            bottom: 0.7rem;
+            left: 0.7rem;
+            right: 0.7rem;
+            background: rgba(11, 20, 38, 0.94);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 0.58rem 0.9rem;
+            display: none;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.75rem;
+            z-index: 500;
+        }
+
+        .nav-hud-bottom.active { display: flex; }
+
+        .map-floating-controls {
+            position: absolute;
+            right: 0.7rem;
+            bottom: 4.15rem;
+            z-index: 500;
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .map-pill-btn {
+            background: rgba(11, 20, 38, 0.92);
+            color: var(--cyan-gps);
+            border: 1.5px solid var(--cyan-gps);
+            border-radius: 999px;
+            padding: 0.38rem 0.72rem;
+            font-size: 0.72rem;
+            font-weight: 800;
+            cursor: pointer;
+        }
+
+        .map-pill-btn.active-follow {
+            background: var(--cyan-gps);
+            color: #090e1a;
+        }
+
+        .proximity-pill {
+            position: absolute;
+            left: 0.7rem;
+            bottom: 4.15rem;
+            z-index: 500;
+            background: rgba(127, 29, 29, 0.94);
+            color: #fecaca;
+            border: 1.5px solid #ef4444;
+            border-radius: 10px;
+            padding: 0.42rem 0.72rem;
+            font-size: 0.73rem;
+            font-weight: 800;
+            display: none;
+            max-width: 65%;
+        }
+
+        .proximity-pill.active { display: block; }
+
+        .map-legend {
+            padding: 0.6rem 0.95rem;
+            background: #0d1526;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            gap: 0.5rem;
+            font-size: 0.72rem;
+            color: var(--text-secondary);
+        }
+
+        .legend-items {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.7rem;
+            align-items: center;
+        }
+
+        .legend-dot {
+            display: inline-block;
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            margin-right: 0.28rem;
+        }
+
+        .side-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 0.7rem;
+        }
+
+        .tabs-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.35rem;
+        }
+
+        .tab-btn {
+            padding: 0.48rem 0.5rem;
+            border-radius: 10px;
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            font-weight: 700;
+            font-size: 0.74rem;
+            cursor: pointer;
+        }
+
+        .tab-btn.active {
+            background: var(--primary-color);
+            color: #fff;
+            border-color: var(--primary-color);
+        }
+
+        .search-row {
+            display: flex;
+            gap: 0.4rem;
+        }
+
+        .search-input {
+            flex: 1;
+            padding: 0.52rem 0.85rem;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            font-size: 0.82rem;
+            background: var(--surface-color);
+            color: var(--text-primary);
+        }
+
+        .filter-bar {
+            display: flex;
+            gap: 0.3rem;
+            flex-wrap: wrap;
+        }
+
+        .filter-btn {
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            padding: 0.32rem 0.62rem;
+            border-radius: 999px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.72rem;
+        }
+
+        .filter-btn.active, .filter-btn:hover {
+            background: var(--primary-color);
+            color: #fff;
+            border-color: var(--primary-color);
+        }
+
+        .list-container {
+            display: grid;
+            gap: 0.65rem;
+            max-height: 560px;
+            overflow-y: auto;
+        }
+
+        .card {
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 0.82rem 0.95rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+            cursor: pointer;
+        }
+
+        .card:hover { border-color: var(--cyan-gps); }
+
+        .card-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 0.5rem;
+        }
+
+        .card-top h3 { font-size: 0.9rem; }
+
+        .card-sub {
+            font-size: 0.76rem;
+            color: var(--text-secondary);
+        }
+
+        .card-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.72rem;
+            color: #7dd3fc;
+        }
+
+        .badge {
+            padding: 0.22rem 0.55rem;
+            border-radius: 999px;
+            font-size: 0.66rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .badge-critical { background: var(--critical-bg); color: var(--critical-text); border: 1px solid var(--critical-border); }
+        .badge-accident { background: var(--accident-bg); color: var(--accident-text); border: 1px solid var(--accident-border); }
+        .badge-danger { background: var(--danger-bg); color: var(--danger-text); border: 1px solid var(--danger-border); }
+        .badge-warning { background: var(--warning-bg); color: var(--warning-text); border: 1px solid var(--warning-border); }
+        .badge-success { background: var(--success-bg); color: var(--success-text); border: 1px solid var(--success-border); }
+
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(9, 14, 26, 0.85);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+            padding: 1rem;
+        }
+
+        .modal-overlay.open { display: flex; }
+
+        .modal {
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            width: 100%;
+            max-width: 460px;
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .form-group label {
+            font-size: 0.76rem;
+            font-weight: 700;
+            color: var(--text-secondary);
+        }
+
+        .form-control {
+            background: var(--surface-elevated);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 0.48rem 0.68rem;
+            font-size: 0.82rem;
+        }
+
+        .toast-container {
+            position: fixed;
+            bottom: 1rem;
+            right: 1rem;
+            z-index: 3000;
+            display: flex;
+            flex-direction: column;
+            gap: 0.45rem;
+            max-width: 340px;
+        }
+
+        .toast {
+            background: #131c31;
+            border-left: 4px solid var(--cyan-gps);
+            border-top: 1px solid var(--border-color);
+            border-right: 1px solid var(--border-color);
+            border-bottom: 1px solid var(--border-color);
+            padding: 0.72rem 0.88rem;
+            border-radius: 10px;
+            font-size: 0.8rem;
+            box-shadow: 0 10px 24px rgba(0,0,0,0.55);
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-brand">
+            <div class="app-logo">🛰️</div>
+            <div>
+                <h1>Cordillera Real-Time GPS, Parking & Hazard Map</h1>
+                <p>Walking • Car • Motor • Truck • Universities, Barangays & Parking across CAR</p>
+            </div>
+        </div>
+        <div class="header-actions">
+            <button id="mapStyleBtn" class="btn btn-secondary">🛰️ Satellite Hybrid</button>
+            <button id="fullRegionBtn" class="btn btn-secondary">🗺️ Full CAR</button>
+            <button id="soundToggleBtn" class="btn btn-secondary">🔇 Audio Off</button>
+            <button id="openReportBtn" class="btn btn-danger">+ Report Hazard</button>
+            <button id="resetDemoBtn" class="btn btn-secondary">↺ Reset</button>
+        </div>
+    </header>
+
+    <div class="workspace-grid">
+        <section class="map-panel">
+            <div class="gps-planner-bar">
+                <div class="planner-title">
+                    <span>📍 Current Location & Route Planner</span>
+                    <span id="gpsHeadingReadout">Heading: 0° N • 16.4122° N, 120.5935° E</span>
+                </div>
+
+                <div class="mode-selector-bar">
+                    <button class="mode-btn" data-mode="walking">🚶 Walking</button>
+                    <button class="mode-btn active" data-mode="car">🚗 Car</button>
+                    <button class="mode-btn" data-mode="motor">🏍️ Motor</button>
+                    <button class="mode-btn" data-mode="truck">🚚 Truck</button>
+                </div>
+
+                <div class="planner-inputs">
+                    <select id="originSelect" class="planner-select"></select>
+                    <button id="swapBtn" class="btn btn-secondary" title="Swap origin and destination">⇄</button>
+                    <select id="destSelect" class="planner-select"></select>
+                    <button id="startNavBtn" class="btn btn-gps">▶ Route</button>
+                </div>
+
+                <div class="gps-telemetry-strip">
+                    <div class="gps-status-group">
+                        <span id="gpsDot" class="gps-dot"></span>
+                        <span id="gpsStatusText">Checking current location...</span>
+                    </div>
+                    <div class="sim-controls">
+                        <button id="trackGpsBtn" class="btn btn-gps" style="padding:0.28rem 0.6rem;font-size:0.72rem;">📡 Track GPS</button>
+                        <select id="simPresetSelect" class="mini-select">
+                            <option value="">Simulate Movement...</option>
+                            <option value="baguio_to_latrinidad">Baguio → La Trinidad</option>
+                            <option value="baguio_to_bontoc">Baguio → Bontoc</option>
+                            <option value="banaue_to_tabuk">Banaue → Tabuk</option>
+                        </select>
+                        <button id="stopSimBtn" class="btn btn-secondary" style="padding:0.28rem 0.5rem;font-size:0.7rem;">⏹</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="map-viewport">
+                <div id="real-map"></div>
+
+                <div id="navHudTop" class="nav-hud-top">
+                    <div id="hudTurnArrow" style="font-size:1.5rem;color:var(--cyan-gps);">➤</div>
+                    <div style="flex:1;">
+                        <div id="navStepMeta" style="font-size:0.7rem;font-weight:800;color:var(--cyan-gps);">GUIDANCE ACTIVE</div>
+                        <div id="navStepInstruction" style="font-size:0.9rem;font-weight:700;">Calculating route...</div>
+                        <div id="navDetourNote" style="font-size:0.73rem;color:#fde68a;margin-top:0.12rem;"></div>
+                    </div>
+                </div>
+
+                <div id="proximityPill" class="proximity-pill"></div>
+
+                <div class="map-floating-controls">
+                    <button id="followToggleBtn" class="map-pill-btn active-follow">🎯 Follow: ON</button>
+                    <button id="centerMeBtn" class="map-pill-btn">📍 Current Loc</button>
+                </div>
+
+                <div id="navHudBottom" class="nav-hud-bottom">
+                    <div>
+                        <span id="etaTime" style="font-size:1.02rem;font-weight:800;color:#34d399;">-- min</span>
+                        <span id="etaDist" style="font-size:0.78rem;color:var(--text-secondary);margin-left:0.5rem;">-- km</span>
+                    </div>
+                    <button id="stopNavBtn" class="btn btn-danger" style="padding:0.32rem 0.65rem;font-size:0.72rem;">Clear Route</button>
+                </div>
+            </div>
+
+            <div class="map-legend">
+                <div class="legend-items">
+                    <span><i class="legend-dot" style="background:#00e5ff;"></i>Current Loc</span>
+                    <span><i class="legend-dot" style="background:#2563eb;"></i>Places & Schools</span>
+                    <span><i class="legend-dot" style="background:#a855f7;"></i>Parking</span>
+                    <span><i class="legend-dot" style="background:#10b981;"></i>Clear</span>
+                    <span><i class="legend-dot" style="background:#f59e0b;"></i>Fog / Work</span>
+                    <span><i class="legend-dot" style="background:#ef4444;"></i>Closed</span>
+                </div>
+                <span>Click map to move Current Location</span>
+            </div>
+        </section>
+
+        <aside class="side-panel">
+            <div class="tabs-row">
+                <button id="tabPlacesBtn" class="tab-btn active">🏔️ Places</button>
+                <button id="tabParkingBtn" class="tab-btn">🅿️ Parking</button>
+                <button id="tabHazardsBtn" class="tab-btn">⚠️ Hazards</button>
+            </div>
+
+            <div class="search-row">
+                <input id="searchInput" type="text" class="search-input" placeholder="Search university, barangay, parking, or town..." />
+                <button id="findOnlineBtn" class="btn btn-secondary" title="Search map for any barangay or place">🔍 Find</button>
+            </div>
+
+            <div id="provinceFilters" class="filter-bar">
+                <button class="filter-btn active" data-prov="all">All CAR</button>
+                <button class="filter-btn" data-prov="Baguio">Baguio</button>
+                <button class="filter-btn" data-prov="Benguet">Benguet</button>
+                <button class="filter-btn" data-prov="Mountain Province">Mt. Province</button>
+                <button class="filter-btn" data-prov="Ifugao">Ifugao</button>
+                <button class="filter-btn" data-prov="Kalinga">Kalinga</button>
+                <button class="filter-btn" data-prov="Abra">Abra</button>
+                <button class="filter-btn" data-prov="Apayao">Apayao</button>
+            </div>
+
+            <div id="parkingFilters" class="filter-bar" style="display:none;">
+                <button class="filter-btn active" data-park="all">All Parking</button>
+                <button class="filter-btn" data-park="car">Car</button>
+                <button class="filter-btn" data-park="motor">Motor</button>
+                <button class="filter-btn" data-park="truck">Truck</button>
+            </div>
+
+            <div id="hazardFilters" class="filter-bar" style="display:none;">
+                <button class="filter-btn active" data-sev="all">All</button>
+                <button class="filter-btn" data-sev="critical">Closed</button>
+                <button class="filter-btn" data-sev="accident">Accident</button>
+                <button class="filter-btn" data-sev="warning">Fog / Work</button>
+                <button class="filter-btn" data-sev="success">Clear</button>
+            </div>
+
+            <div id="listContainer" class="list-container"></div>
+        </aside>
+    </div>
+
+    <div id="reportModal" class="modal-overlay">
+        <div class="modal">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+                <h3>Report Cordillera Road Hazard</h3>
+                <button id="closeModalBtn" class="btn btn-secondary" style="padding:0.22rem 0.55rem;">✕</button>
+            </div>
+            <form id="reportForm" style="display:flex;flex-direction:column;gap:0.7rem;">
+                <div class="form-group">
+                    <label for="hazardProvince">Province / City</label>
+                    <select id="hazardProvince" class="form-control">
+                        <option value="Baguio">Baguio City</option>
+                        <option value="Benguet">Benguet</option>
+                        <option value="Mountain Province">Mountain Province</option>
+                        <option value="Ifugao">Ifugao</option>
+                        <option value="Kalinga">Kalinga</option>
+                        <option value="Abra">Abra</option>
+                        <option value="Apayao">Apayao</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="hazardRoad">Road / Highway</label>
+                    <input id="hazardRoad" type="text" class="form-control" placeholder="e.g., Halsema Hwy, Kennon Rd, Session Rd" required />
+                </div>
+                <div class="form-group">
+                    <label for="hazardType">Hazard Type</label>
+                    <select id="hazardType" class="form-control">
+                        <option value="Landslide / Rockblock">Landslide / Roadblock</option>
+                        <option value="Road Accident">Road Accident</option>
+                        <option value="Dense Mountain Fog">Dense Mountain Fog</option>
+                        <option value="Road Clearing / Repair">Road Clearing / Repair</option>
+                        <option value="Clear Route">Clear Route</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="hazardSeverity">Severity</label>
+                    <select id="hazardSeverity" class="form-control">
+                        <option value="critical">Not Passable (Closed)</option>
+                        <option value="accident">Accident</option>
+                        <option value="warning">Fog / Road Work</option>
+                        <option value="success">Clear</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="hazardSpot">Barangay / Specific Spot</label>
+                    <input id="hazardSpot" type="text" class="form-control" placeholder="e.g., Irisan, Bakakeng Central, Camp 7, Atok" required />
+                </div>
+                <button type="submit" class="btn btn-danger">Publish Hazard Alert</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="toastContainer" class="toast-container"></div>
+
+    <script>
+        const MODE_CONFIG = {
+            walking: { label: "Walking", osrmProfile: "foot", speedKmh: 4.5, note: "Pedestrian & sidewalk paths prioritized" },
+            car:     { label: "Car",     osrmProfile: "driving", speedKmh: 28, note: "Standard road & mountain highway route" },
+            motor:   { label: "Motor",   osrmProfile: "driving", speedKmh: 34, note: "Two-wheel / scooter agility (follow LTO safety & gear)" },
+            truck:   { label: "Truck",   osrmProfile: "driving", speedKmh: 20, note: "Heavy vehicle route — watch steep grades, tight curves & truck bans" }
+        };
+
+        const DEFAULT_CURRENT_LOC = {
+            name: "Current Location (Baguio)",
+            province: "Baguio",
+            coords: [16.4122, 120.5935]
+        };
+
+        const CAR_PLACES = {
+            current_location:    { ...DEFAULT_CURRENT_LOC, coords: [...DEFAULT_CURRENT_LOC.coords] },
+
+            // Universities & Colleges in Baguio & CAR
+            univ_ub:             { name: "University of Baguio (Gen. Luna Rd)", province: "Baguio", coords: [16.4155, 120.5977] },
+            univ_slu_main:       { name: "Saint Louis University — Main Campus", province: "Baguio", coords: [16.4178, 120.5964] },
+            univ_slu_bakakeng:   { name: "Saint Louis University — Maryheights (Bakakeng)", province: "Baguio", coords: [16.3892, 120.5818] },
+            univ_upb:            { name: "University of the Philippines Baguio (Gov. Pack Rd)", province: "Baguio", coords: [16.4088, 120.5985] },
+            univ_uc:             { name: "University of the Cordilleras (Gov. Pack Rd)", province: "Baguio", coords: [16.4094, 120.5972] },
+            univ_bcu:            { name: "Baguio Central University (Bonifacio St)", province: "Baguio", coords: [16.4169, 120.5974] },
+            univ_bsu:            { name: "Benguet State University (La Trinidad)", province: "Benguet", coords: [16.4539, 120.5896] },
+
+            // Baguio Barangays & Districts
+            baguio_burnham:      { name: "Burnham-Legarda / Burnham Park", province: "Baguio", coords: [16.4122, 120.5935] },
+            baguio_session:      { name: "Session Road / Harbor Point-Session", province: "Baguio", coords: [16.4095, 120.5994] },
+            baguio_magsaysay:    { name: "Magsaysay Ave / Baguio Market", province: "Baguio", coords: [16.4163, 120.5955] },
+            baguio_bgh:          { name: "BGH Compound / Salud Mitra", province: "Baguio", coords: [16.4017, 120.5956] },
+            baguio_irisan:       { name: "Barangay Irisan", province: "Baguio", coords: [16.4255, 120.5630] },
+            baguio_bakakeng_n:   { name: "Barangay Bakakeng North", province: "Baguio", coords: [16.3958, 120.5835] },
+            baguio_bakakeng_c:   { name: "Barangay Bakakeng Central", province: "Baguio", coords: [16.3895, 120.5810] },
+            baguio_loakan:       { name: "Barangay Loakan Proper / Airport", province: "Baguio", coords: [16.3752, 120.6194] },
+            baguio_pacdal:       { name: "Barangay Pacdal", province: "Baguio", coords: [16.4192, 120.6258] },
+            baguio_minesview:    { name: "Barangay Mines View Park", province: "Baguio", coords: [16.4216, 120.6275] },
+            baguio_aurora_hill:  { name: "Aurora Hill Proper", province: "Baguio", coords: [16.4235, 120.5990] },
+            baguio_camp7:        { name: "Barangay Camp 7", province: "Baguio", coords: [16.3820, 120.6025] },
+            baguio_camp8:        { name: "Barangay Camp 8", province: "Baguio", coords: [16.3890, 120.6070] },
+            baguio_lucban:       { name: "New Lucban", province: "Baguio", coords: [16.4195, 120.5880] },
+            baguio_guisad:       { name: "Guisad Central / Surong", province: "Baguio", coords: [16.4220, 120.5775] },
+
+            // Benguet
+            benguet_latrinidad:  { name: "La Trinidad (Poblacion / Km. 5)", province: "Benguet", coords: [16.4530, 120.5885] },
+            benguet_tuba:        { name: "Tuba (Poblacion / Camp 4)", province: "Benguet", coords: [16.3650, 120.5480] },
+            benguet_tublay:      { name: "Tublay (Caponga / Acop)", province: "Benguet", coords: [16.5160, 120.6290] },
+            benguet_atok:        { name: "Atok (Sayangan / Highest Point)", province: "Benguet", coords: [16.6150, 120.7520] },
+            benguet_kabayan:     { name: "Kabayan (Mt. Pulag Gateway)", province: "Benguet", coords: [16.6147, 120.8358] },
+            benguet_buguias:     { name: "Buguias (Abatan / Loo)", province: "Benguet", coords: [16.7175, 120.8240] },
+            benguet_mankayan:    { name: "Mankayan", province: "Benguet", coords: [16.8540, 120.7930] },
+
+            // Mountain Province
+            mtprov_bontoc:       { name: "Bontoc (Poblacion)", province: "Mountain Province", coords: [17.0886, 120.9766] },
+            mtprov_sagada:       { name: "Sagada", province: "Mountain Province", coords: [17.0825, 120.9006] },
+            mtprov_bauko:        { name: "Bauko", province: "Mountain Province", coords: [16.9850, 120.8350] },
+            mtprov_paracelis:    { name: "Paracelis", province: "Mountain Province", coords: [17.1670, 121.4560] },
+
+            // Ifugao
+            ifugao_banaue:       { name: "Banaue (Poblacion / Viewpoint)", province: "Ifugao", coords: [16.9275, 121.0583] },
+            ifugao_lagawe:       { name: "Lagawe (Poblacion)", province: "Ifugao", coords: [16.7980, 121.1240] },
+            ifugao_kiangan:      { name: "Kiangan", province: "Ifugao", coords: [16.7740, 121.0870] },
+
+            // Kalinga
+            kalinga_tabuk:       { name: "Tabuk City (Dagupan / Bulanao)", province: "Kalinga", coords: [17.4086, 121.4414] },
+            kalinga_lubuagan:    { name: "Lubuagan", province: "Kalinga", coords: [17.3450, 121.1750] },
+            kalinga_tinglayan:   { name: "Tinglayan (Buscalan Area)", province: "Kalinga", coords: [17.1360, 121.1530] },
+
+            // Abra
+            abra_bangued:        { name: "Bangued (Poblacion)", province: "Abra", coords: [17.5958, 120.6186] },
+            abra_dolores:        { name: "Dolores", province: "Abra", coords: [17.6480, 120.7260] },
+            abra_bucay:          { name: "Bucay", province: "Abra", coords: [17.5370, 120.7130] },
+
+            // Apayao
+            apayao_kabugao:      { name: "Kabugao (Poblacion)", province: "Apayao", coords: [18.0217, 121.1819] },
+            apayao_luna:         { name: "Luna", province: "Apayao", coords: [18.3380, 121.3560] },
+            apayao_conner:       { name: "Conner", province: "Apayao", coords: [17.8010, 121.3210] }
+        };
+
+        const PARKING_SPOTS = [
+            {
+                id: "pk_sm_baguio",
+                name: "SM City Baguio Parking Area",
+                area: "Upper Session / Luneta Hill, Baguio",
+                modes: ["car", "motor"],
+                note: "Multi-level & open slots; convenient for Session & Burnham",
+                coords: [16.4088, 120.5996]
+            },
+            {
+                id: "pk_burnham_lot",
+                name: "Burnham / Harrison Parking Zone",
+                area: "Burnham-Legarda, Baguio",
+                modes: ["car", "motor"],
+                note: "Near Burnham Park & public transport hub; gets full peak hours",
+                coords: [16.4126, 120.5952]
+            },
+            {
+                id: "pk_magsaysay_bay",
+                name: "Magsaysay Market & Cargo Bay",
+                area: "Magsaysay Ave, Baguio",
+                modes: ["car", "motor", "truck"],
+                note: "Loading & wider road access near market & transport terminals",
+                coords: [16.4168, 120.5948]
+            },
+            {
+                id: "pk_marcos_layby",
+                name: "Marcos Hwy / Tuba Wide Lay-by",
+                area: "Marcos Highway Corridor, Benguet",
+                modes: ["car", "motor", "truck"],
+                note: "Broader highway shoulder & pull-off suitable for bigger vehicles",
+                coords: [16.3875, 120.5735]
+            },
+            {
+                id: "pk_latrinidad_km5",
+                name: "La Trinidad Km. 5 / Trading Area",
+                area: "Km. 5, La Trinidad, Benguet",
+                modes: ["car", "motor", "truck"],
+                note: "Accessible parking & staging near provincial capital & trading lanes",
+                coords: [16.4535, 120.5892]
+            },
+            {
+                id: "pk_bontoc_center",
+                name: "Bontoc Town Parking Area",
+                area: "Poblacion, Bontoc, Mt. Province",
+                modes: ["car", "motor"],
+                note: "Central parking near town proper; check local clearance for trucks",
+                coords: [17.0882, 120.9760]
+            },
+            {
+                id: "pk_banaue_view",
+                name: "Banaue Town & Viewpoint Parking",
+                area: "Banaue, Ifugao",
+                modes: ["car", "motor"],
+                note: "Designated stop & parking spaces near town center",
+                coords: [16.9278, 121.0588]
+            },
+            {
+                id: "pk_tabuk_hub",
+                name: "Tabuk City Transport & Highway Parking",
+                area: "Bulanao / Dagupan, Tabuk, Kalinga",
+                modes: ["car", "motor", "truck"],
+                note: "Wider valley highway access for cars, motorcycles, and trucks",
+                coords: [17.4090, 121.4418]
+            }
+        ];
+
+        const INITIAL_HAZARDS = [
+            { id: 1, province: "Benguet", road: "Kennon Road", type: "Rockslide / Clearing", spot: "Camp 4–6 Canyon", status: "critical", coords: [16.3580, 120.6055] },
+            { id: 2, province: "Benguet", road: "Halsema Highway", type: "Dense Mountain Fog", spot: "Atok Ridge", status: "warning", coords: [16.6150, 120.7520] },
+            { id: 3, province: "Mountain Province", road: "Bontoc–Sagada Rd", type: "Clear Mountain Route", spot: "Sagada Junction", status: "success", coords: [17.0850, 120.9400] },
+            { id: 4, province: "Ifugao", road: "Banaue–Hungduan–Benguet Rd", type: "Minor Slope Clearing", spot: "Banaue Viewpoint", status: "warning", coords: [16.9275, 121.0583] },
+            { id: 5, province: "Kalinga", road: "Bontoc–Tabuk Rd", type: "Clear Corridor", spot: "Lubuagan–Tabuk", status: "success", coords: [17.3450, 121.1750] },
+            { id: 6, province: "Abra", road: "Abra–Ilocos Sur Rd", type: "Clear Corridor", spot: "Bangued Approach", status: "success", coords: [17.5958, 120.6186] },
+            { id: 7, province: "Apayao", road: "Apayao–Ilocos Norte Rd", type: "Clear Corridor", spot: "Kabugao Area", status: "success", coords: [18.0217, 121.1819] }
+        ];
+
+        const SIM_ROUTES = {
+            baguio_to_latrinidad: [
+                [16.4122, 120.5935], [16.4250, 120.5910], [16.4390, 120.5895], [16.4530, 120.5885]
+            ],
+            baguio_to_bontoc: [
+                [16.4530, 120.5885], [16.6150, 120.7520], [16.8540, 120.7930], [16.9930, 120.9350], [17.0886, 120.9766]
+            ],
+            banaue_to_tabuk: [
+                [16.9275, 121.0583], [17.0500, 121.1100], [17.1360, 121.1530], [17.3450, 121.1750], [17.4086, 121.4414]
+            ]
+        };
+
+        const STATUS_COLORS = {
+            critical: "#ef4444",
+            accident: "#f97316",
+            danger:   "#f43f5e",
+            warning:  "#f59e0b",
+            success:  "#10b981"
+        };
+
+        const STATUS_LABELS = {
+            critical: "Closed",
+            accident: "Accident",
+            danger:   "Heavy Jam",
+            warning:  "Fog / Work",
+            success:  "Clear"
+        };
+
+        const CAR_CENTER = [17.25, 120.95];
+        const CAR_ZOOM = 9;
+
+        let hazards = JSON.parse(JSON.stringify(INITIAL_HAZARDS));
+        let travelMode = "car";
+        let activeTab = "places";
+        let activeProvince = "all";
+        let activeParkingMode = "all";
+        let activeSeverity = "all";
+        let searchQuery = "";
+        let audioEnabled = false;
+        let followUser = false;
+        let watchId = null;
+        let simTimer = null;
+        let lastCoords = null;
+        let currentPos = [...DEFAULT_CURRENT_LOC.coords];
+        let currentHeading = 0;
+        let activeDestCoords = null;
+        let activeDestLabel = "";
+        let routeLayer = null;
+        let routeGlowLayer = null;
+        let alertedIds = new Set();
+        let mapStyleIndex = 0;
+
+        const map = L.map("real-map", { attributionControl: false }).setView(CAR_CENTER, CAR_ZOOM);
+
+        const satelliteImagery = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+            maxZoom: 19
+        });
+        const hybridLabelsOverlay = L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png", {
+            subdomains: "abcd",
+            maxZoom: 19,
+            opacity: 0.92
+        });
+        const satelliteHybridGroup = L.layerGroup([satelliteImagery, hybridLabelsOverlay]);
+        const streetTileLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 });
+        const darkTileLayer = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", { subdomains: "abcd", maxZoom: 19 });
+
+        satelliteHybridGroup.addTo(map);
+
+        const placesLayer = L.layerGroup().addTo(map);
+        const parkingLayer = L.layerGroup().addTo(map);
+        const hazardsLayer = L.layerGroup().addTo(map);
+
+        const arrowIcon = L.divIcon({
+            className: "gps-arrow-marker",
+            html: `
+                <div id="gpsArrowRotator" class="gps-arrow-rotator" style="transform: rotate(0deg);">
+                    <svg class="gps-arrow-svg" viewBox="0 0 40 40">
+                        <circle cx="20" cy="22" r="9" fill="#00e5ff" fill-opacity="0.3" stroke="#ffffff" stroke-width="2"/>
+                        <polygon points="20,3 31,27 20,21 9,27" fill="#00e5ff" stroke="#090e1a" stroke-width="2" stroke-linejoin="round"/>
+                    </svg>
+                </div>
+            `,
+            iconSize: [44, 44],
+            iconAnchor: [22, 22]
+        });
+
+        const userMarker = L.marker(currentPos, { icon: arrowIcon, zIndexOffset: 1000 }).addTo(map);
+        const accuracyCircle = L.circle(currentPos, {
+            radius: 25,
+            color: "#00e5ff",
+            fillColor: "#00e5ff",
+            fillOpacity: 0.14,
+            weight: 1.5
+        }).addTo(map);
+
+        const originSelect = document.getElementById("originSelect");
+        const destSelect = document.getElementById("destSelect");
+
+        function populateSelects() {
+            const prevOrigin = originSelect.value || "current_location";
+            const prevDest = destSelect.value || "univ_ub";
+            originSelect.innerHTML = "";
+            destSelect.innerHTML = "";
+
+            const currentOpt = new Option(`📍 ${CAR_PLACES.current_location.name}`, "current_location");
+            originSelect.add(currentOpt);
+
+            Object.entries(CAR_PLACES).forEach(([key, place]) => {
+                if (key === "current_location") return;
+                const label = `${place.name} (${place.province})`;
+                originSelect.add(new Option(label, key));
+                destSelect.add(new Option(label, key));
+            });
+
+            originSelect.value = CAR_PLACES[prevOrigin] ? prevOrigin : "current_location";
+            destSelect.value = CAR_PLACES[prevDest] ? prevDest : "univ_ub";
+        }
+
+        function setCurrentLocationRecord(lat, lng, labelText = null) {
+            CAR_PLACES.current_location.coords = [lat, lng];
+            if (labelText) {
+                CAR_PLACES.current_location.name = labelText;
+            }
+            const opt = originSelect.querySelector('option[value="current_location"]');
+            if (opt) {
+                opt.textContent = `📍 ${CAR_PLACES.current_location.name}`;
+            }
+        }
+
+        function updateModeBannerText(prefix = "") {
+            const cfg = MODE_CONFIG[travelMode];
+            document.getElementById("gpsStatusText").textContent =
+                prefix ? `${prefix} • ${cfg.label}` : `Current Location set • ${cfg.label}: ${cfg.note}`;
+        }
+
+        function setArrowAngle(deg) {
+            const normalized = ((Math.round(deg) % 360) + 360) % 360;
+            currentHeading = normalized;
+            const rotator = document.getElementById("gpsArrowRotator");
+            if (rotator) rotator.style.transform = `rotate(${normalized}deg)`;
+            const dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+            const cardinal = dirs[Math.round(normalized / 45) % 8];
+            document.getElementById("gpsHeadingReadout").textContent =
+                `Heading: ${normalized}° ${cardinal} • ${currentPos[0].toFixed(4)}° N, ${currentPos[1].toFixed(4)}° E`;
+        }
+
+        function playBeep(freq = 760) {
+            if (!audioEnabled) return;
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = "triangle";
+                osc.frequency.value = freq;
+                gain.gain.value = 0.08;
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.2);
+            } catch (e) {}
+        }
+
+        function showToast(msg) {
+            const box = document.getElementById("toastContainer");
+            const el = document.createElement("div");
+            el.className = "toast";
+            el.textContent = msg;
+            box.appendChild(el);
+            setTimeout(() => el.remove(), 4000);
+        }
+
+        function renderMapMarkers() {
+            placesLayer.clearLayers();
+            parkingLayer.clearLayers();
+            hazardsLayer.clearLayers();
+
+            Object.entries(CAR_PLACES).forEach(([key, place]) => {
+                if (key === "current_location") return;
+                const pin = L.circleMarker(place.coords, {
+                    radius: 6.5,
+                    fillColor: "#2563eb",
+                    color: "#ffffff",
+                    weight: 2,
+                    fillOpacity: 0.95
+                });
+                pin.bindPopup(
+                    `<strong>${place.name}</strong><br>${place.province} • CAR<br>` +
+                    `<button onclick="routeToCoords(${place.coords[0]}, ${place.coords[1]}, '${place.name.replace(/'/g, "\\'")}')" style="margin-top:6px;padding:4px 8px;border-radius:6px;border:none;background:#0284c7;color:#fff;font-weight:700;cursor:pointer;">Route from Current Loc</button>`
+                );
+                placesLayer.addLayer(pin);
+            });
+
+            PARKING_SPOTS.forEach(pk => {
+                const pPin = L.circleMarker(pk.coords, {
+                    radius: 7.5,
+                    fillColor: "#a855f7",
+                    color: "#ffffff",
+                    weight: 2,
+                    fillOpacity: 0.95
+                });
+                pPin.bindPopup(
+                    `<strong>🅿️ ${pk.name}</strong><br>${pk.area}<br>Modes: ${pk.modes.map(m => MODE_CONFIG[m].label).join(", ")}<br>` +
+                    `<button onclick="routeToCoords(${pk.coords[0]}, ${pk.coords[1]}, 'Parking: ${pk.name.replace(/'/g, "\\'")}')" style="margin-top:6px;padding:4px 8px;border-radius:6px;border:none;background:#7e22ce;color:#fff;font-weight:700;cursor:pointer;">Route to Parking</button>`
+                );
+                parkingLayer.addLayer(pPin);
+            });
+
+            hazards.forEach(h => {
+                if (!h.coords) return;
+                const hPin = L.circleMarker(h.coords, {
+                    radius: 8,
+                    fillColor: STATUS_COLORS[h.status] || "#f59e0b",
+                    color: "#ffffff",
+                    weight: 2,
+                    fillOpacity: 0.95
+                });
+                hPin.bindPopup(`<strong>${h.road}</strong> (${h.province})<br>${h.type} • ${h.spot}<br>Status: ${STATUS_LABELS[h.status]}`);
+                hPin.on("click", () => {
+                    followUser = false;
+                    updateFollowBtn();
+                    map.setView(h.coords, 14);
+                });
+                hazardsLayer.addLayer(hPin);
+            });
+        }
+
+        window.routeToCoords = function (lat, lng, label) {
+            followUser = false;
+            updateFollowBtn();
+            drawRoadRoute(currentPos, [lat, lng], label);
+        };
+
+        function renderSideList() {
+            const container = document.getElementById("listContainer");
+            const q = searchQuery.trim().toLowerCase();
+
+            if (activeTab === "places") {
+                const entries = Object.entries(CAR_PLACES).filter(([key, p]) => {
+                    if (key === "current_location") return false;
+                    const matchProv = activeProvince === "all" || p.province === activeProvince;
+                    const matchSearch = !q || `${p.name} ${p.province}`.toLowerCase().includes(q);
+                    return matchProv && matchSearch;
+                });
+
+                if (entries.length === 0) {
+                    container.innerHTML = `<div class="card"><div class="card-sub">No local match for "${searchQuery}". Click "🔍 Find" to search the map.</div></div>`;
+                    return;
+                }
+
+                container.innerHTML = entries.map(([key, p]) => `
+                    <article class="card" data-place="${key}">
+                        <div class="card-top">
+                            <div>
+                                <h3>${p.name}</h3>
+                                <div class="card-sub">${p.province} • Cordillera</div>
+                            </div>
+                            <span class="badge badge-success">${MODE_CONFIG[travelMode].label}</span>
+                        </div>
+                        <div class="card-footer">
+                            <span>${p.coords[0].toFixed(3)}° N, ${p.coords[1].toFixed(3)}° E</span>
+                            <span>➤ Route (${MODE_CONFIG[travelMode].label})</span>
+                        </div>
+                    </article>
+                `).join("");
+
+                container.querySelectorAll(".card").forEach(card => {
+                    card.addEventListener("click", () => {
+                        const key = card.dataset.place;
+                        const place = CAR_PLACES[key];
+                        if (!place) return;
+                        followUser = false;
+                        updateFollowBtn();
+                        destSelect.value = key;
+                        drawRoadRoute(currentPos, place.coords, place.name);
+                    });
+                });
+            } else if (activeTab === "parking") {
+                const spots = PARKING_SPOTS.filter(pk => {
+                    const matchMode = activeParkingMode === "all" || pk.modes.includes(activeParkingMode);
+                    const matchSearch = !q || `${pk.name} ${pk.area} ${pk.note}`.toLowerCase().includes(q);
+                    return matchMode && matchSearch;
+                }).map(pk => ({ ...pk, distKm: (map.distance(currentPos, pk.coords) / 1000).toFixed(1) }));
+
+                if (spots.length === 0) {
+                    container.innerHTML = `<div class="card"><div class="card-sub">No parking spots match this filter.</div></div>`;
+                    return;
+                }
+
+                container.innerHTML = spots.map(pk => `
+                    <article class="card" data-pk="${pk.id}">
+                        <div class="card-top">
+                            <div>
+                                <h3>🅿️ ${pk.name}</h3>
+                                <div class="card-sub">${pk.area} • ${pk.note}</div>
+                            </div>
+                            <span class="badge badge-warning">${pk.distKm} km</span>
+                        </div>
+                        <div class="card-footer">
+                            <span>Fits: ${pk.modes.map(m => MODE_CONFIG[m].label).join(", ")}</span>
+                            <span>➤ Route to Parking</span>
+                        </div>
+                    </article>
+                `).join("");
+
+                container.querySelectorAll(".card").forEach(card => {
+                    card.addEventListener("click", () => {
+                        const spot = PARKING_SPOTS.find(x => x.id === card.dataset.pk);
+                        if (!spot) return;
+                        followUser = false;
+                        updateFollowBtn();
+                        drawRoadRoute(currentPos, spot.coords, `Parking: ${spot.name}`);
+                    });
+                });
+            } else {
+                const filtered = hazards.filter(h => {
+                    const matchSev = activeSeverity === "all" || h.status === activeSeverity;
+                    const matchSearch = !q || `${h.road} ${h.type} ${h.spot} ${h.province}`.toLowerCase().includes(q);
+                    return matchSev && matchSearch;
+                });
+
+                if (filtered.length === 0) {
+                    container.innerHTML = `<div class="card"><div class="card-sub">No matching road hazards.</div></div>`;
+                    return;
+                }
+
+                container.innerHTML = filtered.map(h => `
+                    <article class="card" data-hid="${h.id}">
+                        <div class="card-top">
+                            <div>
+                                <h3>${h.road}</h3>
+                                <div class="card-sub">${h.type} • ${h.spot} (${h.province})</div>
+                            </div>
+                            <span class="badge badge-${h.status}">${STATUS_LABELS[h.status]}</span>
+                        </div>
+                        <div class="card-footer">
+                            <span>Tap to locate on map</span>
+                        </div>
+                    </article>
+                `).join("");
+
+                container.querySelectorAll(".card").forEach(card => {
+                    card.addEventListener("click", () => {
+                        const item = hazards.find(x => x.id === Number(card.dataset.hid));
+                        if (item && item.coords) {
+                            followUser = false;
+                            updateFollowBtn();
+                            map.setView(item.coords, 14);
+                        }
+                    });
+                });
+            }
+        }
+
+        async function searchCordilleraOnline() {
+            const query = searchQuery.trim();
+            if (!query) {
+                showToast("Type a university, barangay, or place name first.");
+                return;
+            }
+            showToast(`Searching "${query}" in Cordillera...`);
+            try {
+                const url = `https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=ph&q=${encodeURIComponent(query + " Cordillera Philippines")}`;
+                const res = await fetch(url);
+                const results = await res.json();
+
+                if (!Array.isArray(results) || results.length === 0) {
+                    showToast("No map location found for that name.");
+                    return;
+                }
+
+                results.forEach((r, idx) => {
+                    const key = `osm_${Date.now()}_${idx}`;
+                    const shortName = r.display_name.split(",")[0];
+                    CAR_PLACES[key] = {
+                        name: shortName,
+                        province: activeProvince === "all" ? "Cordillera" : activeProvince,
+                        coords: [Number(r.lat), Number(r.lon)]
+                    };
+                });
+
+                populateSelects();
+                renderMapMarkers();
+                renderSideList();
+                const first = results[0];
+                followUser = false;
+                updateFollowBtn();
+                map.setView([Number(first.lat), Number(first.lon)], 15);
+                showToast(`Added ${results.length} matching place(s).`);
+            } catch (e) {
+                showToast("Map search unavailable right now.");
+            }
+        }
+
+        function getBearing(from, to) {
+            const toRad = d => d * Math.PI / 180;
+            const toDeg = r => r * 180 / Math.PI;
+            const dLon = toRad(to[1] - from[1]);
+            const y = Math.sin(dLon) * Math.cos(toRad(to[0]));
+            const x = Math.cos(toRad(from[0])) * Math.sin(toRad(to[1])) -
+                      Math.sin(toRad(from[0])) * Math.cos(toRad(to[1])) * Math.cos(dLon);
+            return (toDeg(Math.atan2(y, x)) + 360) % 360;
+        }
+
+        function checkProximity(pos) {
+            const pill = document.getElementById("proximityPill");
+            let msg = "";
+            hazards.forEach(h => {
+                if (!h.coords || h.status === "success") return;
+                const d = map.distance(pos, h.coords);
+                if (d < 1000) {
+                    msg = `⚠️ ${Math.round(d)}m: ${h.road} (${h.type})`;
+                    if (!alertedIds.has(h.id)) {
+                        alertedIds.add(h.id);
+                        playBeep(h.status === "critical" ? 880 : 650);
+                        showToast(msg);
+                    }
+                }
+            });
+            if (msg) {
+                pill.textContent = msg;
+                pill.classList.add("active");
+            } else {
+                pill.classList.remove("active");
+            }
+        }
+
+        function updatePosition(lat, lng, accuracy = 20, statusText = null, headingFromSensor = null, customLocLabel = null) {
+            const next = [lat, lng];
+            currentPos = next;
+            setCurrentLocationRecord(lat, lng, customLocLabel);
+            userMarker.setLatLng(next);
+            accuracyCircle.setLatLng(next).setRadius(Math.min(Math.max(accuracy, 15), 250));
+
+            if (activeDestCoords && map.distance(next, activeDestCoords) > 15) {
+                setArrowAngle(getBearing(next, activeDestCoords));
+            } else if (typeof headingFromSensor === "number" && !Number.isNaN(headingFromSensor)) {
+                setArrowAngle(headingFromSensor);
+            } else if (lastCoords && map.distance(lastCoords, next) > 2) {
+                setArrowAngle(getBearing(lastCoords, next));
+            } else {
+                setArrowAngle(currentHeading);
+            }
+
+            lastCoords = next;
+            updateModeBannerText(statusText || "");
+
+            if (followUser) {
+                map.panTo(next, { animate: true, duration: 0.4 });
+            }
+
+            checkProximity(next);
+            if (activeTab === "parking") renderSideList();
+        }
+
+        function detectInitialCurrentLocation() {
+            updatePosition(
+                DEFAULT_CURRENT_LOC.coords[0],
+                DEFAULT_CURRENT_LOC.coords[1],
+                35,
+                "Current Location: Baguio (default)",
+                null,
+                "Current Location (Baguio)"
+            );
+
+            if (!("geolocation" in navigator)) return;
+
+            navigator.geolocation.getCurrentPosition(
+                pos => {
+                    updatePosition(
+                        pos.coords.latitude,
+                        pos.coords.longitude,
+                        pos.coords.accuracy,
+                        `Current Location (±${Math.round(pos.coords.accuracy)}m)`,
+                        pos.coords.heading,
+                        `Current Location (${pos.coords.latitude.toFixed(3)}, ${pos.coords.longitude.toFixed(3)})`
+                    );
+                },
+                () => {},
+                { enableHighAccuracy: true, maximumAge: 10000, timeout: 6000 }
+            );
+        }
+
+        function stopSim() {
+            if (simTimer) {
+                clearInterval(simTimer);
+                simTimer = null;
+            }
+            document.getElementById("gpsDot").classList.remove("sim");
+        }
+
+        function startLiveGps() {
+            stopSim();
+            if (!("geolocation" in navigator)) {
+                showToast("Geolocation is not supported by your browser.");
+                return;
+            }
+            if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+
+            followUser = true;
+            updateFollowBtn();
+            map.setZoom(15);
+            document.getElementById("gpsStatusText").textContent = "Watching live GPS...";
+
+            watchId = navigator.geolocation.watchPosition(
+                pos => {
+                    updatePosition(
+                        pos.coords.latitude,
+                        pos.coords.longitude,
+                        pos.coords.accuracy,
+                        `Live GPS (±${Math.round(pos.coords.accuracy)}m)`,
+                        pos.coords.heading,
+                        `Current Location (${pos.coords.latitude.toFixed(3)}, ${pos.coords.longitude.toFixed(3)})`
+                    );
+                },
+                err => {
+                    showToast(`GPS notice: ${err.message}. Click map or use Simulate.`);
+                    updateModeBannerText("Tap map to set Current Location");
+                },
+                { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
+            );
+        }
+
+        function startSim(key) {
+            const pts = SIM_ROUTES[key];
+            if (!pts) return;
+            if (watchId !== null) {
+                navigator.geolocation.clearWatch(watchId);
+                watchId = null;
+            }
+            stopSim();
+            followUser = true;
+            updateFollowBtn();
+            map.setZoom(13);
+            document.getElementById("gpsDot").classList.add("sim");
+
+            let i = 0;
+            const nextPt = pts[1] || pts[0];
+            currentHeading = getBearing(pts[0], nextPt);
+            updatePosition(pts[0][0], pts[0][1], 15, `Sim step ${i + 1}/${pts.length}`, currentHeading, "Current Location (Simulated)");
+
+            simTimer = setInterval(() => {
+                i++;
+                if (i >= pts.length) {
+                    stopSim();
+                    showToast("Simulation finished.");
+                    return;
+                }
+                const targetPt = pts[i + 1] || pts[i];
+                const moveAngle = map.distance(pts[i], targetPt) > 1 ? getBearing(pts[i], targetPt) : currentHeading;
+                updatePosition(pts[i][0], pts[i][1], 15, `Sim step ${i + 1}/${pts.length}`, moveAngle, "Current Location (Simulated)");
+            }, 900);
+        }
+
+        async function drawRoadRoute(fromCoords, toCoords, destLabel = "Destination") {
+            if (routeLayer) map.removeLayer(routeLayer);
+            if (routeGlowLayer) map.removeLayer(routeGlowLayer);
+
+            activeDestCoords = toCoords;
+            activeDestLabel = destLabel;
+            setArrowAngle(getBearing(currentPos, toCoords));
+
+            const cfg = MODE_CONFIG[travelMode];
+            document.getElementById("navHudTop").classList.add("active");
+            document.getElementById("navHudBottom").classList.add("active");
+            document.getElementById("navStepMeta").textContent = `${cfg.label.toUpperCase()} GUIDANCE`;
+            document.getElementById("navStepInstruction").textContent = `Arrow pointing toward ${destLabel}...`;
+
+            let parkingNote = cfg.note;
+            if (travelMode !== "walking") {
+                const nearestPark = PARKING_SPOTS
+                    .filter(pk => pk.modes.includes(travelMode))
+                    .map(pk => ({ ...pk, d: map.distance(toCoords, pk.coords) }))
+                    .sort((a, b) => a.d - b.d)[0];
+                if (nearestPark) {
+                    parkingNote = `Nearby ${cfg.label} parking: ${nearestPark.name} (${(nearestPark.d / 1000).toFixed(1)} km from destination)`;
+                }
+            }
+
+            try {
+                const url = `https://router.project-osrm.org/route/v1/${cfg.osrmProfile}/${fromCoords[1]},${fromCoords[0]};${toCoords[1]},${toCoords[0]}?overview=full&geometries=geojson`;
+                const res = await fetch(url);
+                const data = await res.json();
+
+                if (data.routes && data.routes[0]) {
+                    const route = data.routes[0];
+                    const latLngs = route.geometry.coordinates.map(c => [c[1], c[0]]);
+                    const lineColor = travelMode === "walking" ? "#34d399" : travelMode === "truck" ? "#fbbf24" : "#00e5ff";
+                    routeGlowLayer = L.polyline(latLngs, { color: "rgba(0, 229, 255, 0.28)", weight: 11 }).addTo(map);
+                    routeLayer = L.polyline(latLngs, { color: lineColor, weight: 5, dashArray: travelMode === "walking" ? "4,8" : "10,6" }).addTo(map);
+                    map.fitBounds(routeLayer.getBounds(), { padding: [30, 30] });
+
+                    const km = (route.distance / 1000).toFixed(1);
+                    const mins = Math.max(1, Math.round((Number(km) / cfg.speedKmh) * 60));
+                    document.getElementById("etaTime").textContent = `~${mins} min (${cfg.label})`;
+                    document.getElementById("etaDist").textContent = `${km} km`;
+                    document.getElementById("navStepInstruction").textContent = `${cfg.label} route to ${destLabel}`;
+                    document.getElementById("navDetourNote").textContent = parkingNote;
+                    return;
+                }
+            } catch (e) {}
+
+            const fallback = [fromCoords, toCoords];
+            routeLayer = L.polyline(fallback, { color: "#00e5ff", weight: 5, dashArray: "8,6" }).addTo(map);
+            map.fitBounds(routeLayer.getBounds(), { padding: [30, 30] });
+            const km = (map.distance(fromCoords, toCoords) / 1000).toFixed(1);
+            const mins = Math.max(1, Math.round((Number(km) / cfg.speedKmh) * 60));
+            document.getElementById("etaTime").textContent = `~${mins} min (${cfg.label})`;
+            document.getElementById("etaDist").textContent = `${km} km`;
+            document.getElementById("navStepInstruction").textContent = `Direction to ${destLabel}`;
+            document.getElementById("navDetourNote").textContent = parkingNote;
+        }
+
+        function updateFollowBtn() {
+            const btn = document.getElementById("followToggleBtn");
+            btn.textContent = followUser ? "🎯 Follow: ON" : "🎯 Follow: OFF";
+            btn.classList.toggle("active-follow", followUser);
+        }
+
+        document.querySelectorAll(".mode-btn").forEach(btn => {
+            btn.addEventListener("click", () => {
+                document.querySelectorAll(".mode-btn").forEach(b => b.classList.remove("active"));
+                btn.classList.add("active");
+                travelMode = btn.dataset.mode;
+                updateModeBannerText();
+                if (activeTab === "parking") renderSideList();
+                if (activeDestCoords) {
+                    drawRoadRoute(currentPos, activeDestCoords, activeDestLabel || "Destination");
+                }
+            });
+        });
+
+        document.getElementById("mapStyleBtn").addEventListener("click", function () {
+            map.removeLayer(satelliteHybridGroup);
+            map.removeLayer(streetTileLayer);
+            map.removeLayer(darkTileLayer);
+
+            mapStyleIndex = (mapStyleIndex + 1) % 3;
+            if (mapStyleIndex === 0) {
+                satelliteHybridGroup.addTo(map);
+                this.textContent = "🛰️ Satellite Hybrid";
+            } else if (mapStyleIndex === 1) {
+                streetTileLayer.addTo(map);
+                this.textContent = "🗺️ Street Map";
+            } else {
+                darkTileLayer.addTo(map);
+                this.textContent = "🌙 Dark Map";
+            }
+        });
+
+        map.on("click", e => {
+            stopSim();
+            updatePosition(
+                e.latlng.lat,
+                e.latlng.lng,
+                12,
+                `Current Loc set (${e.latlng.lat.toFixed(3)}, ${e.latlng.lng.toFixed(3)})`,
+                null,
+                `Current Location (${e.latlng.lat.toFixed(3)}, ${e.latlng.lng.toFixed(3)})`
+            );
+        });
+
+        map.on("dragstart", () => {
+            followUser = false;
+            updateFollowBtn();
+        });
+
+        document.getElementById("fullRegionBtn").addEventListener("click", () => {
+            followUser = false;
+            updateFollowBtn();
+            map.setView(CAR_CENTER, CAR_ZOOM);
+        });
+
+        document.getElementById("trackGpsBtn").addEventListener("click", startLiveGps);
+        document.getElementById("simPresetSelect").addEventListener("change", e => {
+            if (e.target.value) startSim(e.target.value);
+        });
+        document.getElementById("stopSimBtn").addEventListener("click", () => {
+            stopSim();
+            document.getElementById("simPresetSelect").value = "";
+            updateModeBannerText("Simulation stopped");
+        });
+
+        document.getElementById("followToggleBtn").addEventListener("click", () => {
+            followUser = !followUser;
+            updateFollowBtn();
+            if (followUser) map.panTo(currentPos);
+        });
+
+        document.getElementById("centerMeBtn").addEventListener("click", () => {
+            followUser = true;
+            updateFollowBtn();
+            map.setView(currentPos, 15);
+            detectInitialCurrentLocation();
+        });
+
+        document.getElementById("swapBtn").addEventListener("click", () => {
+            const tmp = originSelect.value;
+            if (CAR_PLACES[destSelect.value]) {
+                originSelect.value = destSelect.value;
+            }
+            if (CAR_PLACES[tmp] && tmp !== "current_location") {
+                destSelect.value = tmp;
+            }
+        });
+
+        document.getElementById("startNavBtn").addEventListener("click", () => {
+            const from = CAR_PLACES[originSelect.value]?.coords || currentPos;
+            const toPlace = CAR_PLACES[destSelect.value];
+            if (!toPlace) return;
+            followUser = false;
+            updateFollowBtn();
+            drawRoadRoute(from, toPlace.coords, toPlace.name);
+        });
+
+        document.getElementById("stopNavBtn").addEventListener("click", () => {
+            activeDestCoords = null;
+            activeDestLabel = "";
+            if (routeLayer) map.removeLayer(routeLayer);
+            if (routeGlowLayer) map.removeLayer(routeGlowLayer);
+            document.getElementById("navHudTop").classList.remove("active");
+            document.getElementById("navHudBottom").classList.remove("active");
+        });
+
+        document.getElementById("soundToggleBtn").addEventListener("click", function () {
+            audioEnabled = !audioEnabled;
+            this.textContent = audioEnabled ? "🔊 Audio On" : "🔇 Audio Off";
+            this.className = audioEnabled ? "btn btn-sound-active" : "btn btn-secondary";
+            if (audioEnabled) playBeep(780);
+        });
+
+        document.getElementById("resetDemoBtn").addEventListener("click", () => {
+            stopSim();
+            activeDestCoords = null;
+            hazards = JSON.parse(JSON.stringify(INITIAL_HAZARDS));
+            alertedIds.clear();
+            populateSelects();
+            detectInitialCurrentLocation();
+            renderMapMarkers();
+            renderSideList();
+            map.setView(CAR_CENTER, CAR_ZOOM);
+            showToast("Reset to full Cordillera satellite view.");
+        });
+
+        function switchTab(tab) {
+            activeTab = tab;
+            document.getElementById("tabPlacesBtn").classList.toggle("active", tab === "places");
+            document.getElementById("tabParkingBtn").classList.toggle("active", tab === "parking");
+            document.getElementById("tabHazardsBtn").classList.toggle("active", tab === "hazards");
+            document.getElementById("provinceFilters").style.display = tab === "places" ? "flex" : "none";
+            document.getElementById("parkingFilters").style.display = tab === "parking" ? "flex" : "none";
+            document.getElementById("hazardFilters").style.display = tab === "hazards" ? "flex" : "none";
+            renderSideList();
+        }
+
+        document.getElementById("tabPlacesBtn").addEventListener("click", () => switchTab("places"));
+        document.getElementById("tabParkingBtn").addEventListener("click", () => switchTab("parking"));
+        document.getElementById("tabHazardsBtn").addEventListener("click", () => switchTab("hazards"));
+
+        document.querySelectorAll("#provinceFilters .filter-btn").forEach(btn => {
+            btn.addEventListener("click", () => {
+                document.querySelectorAll("#provinceFilters .filter-btn").forEach(b => b.classList.remove("active"));
+                btn.classList.add("active");
+                activeProvince = btn.dataset.prov;
+                renderSideList();
+            });
+        });
+
+        document.querySelectorAll("#parkingFilters .filter-btn").forEach(btn => {
+            btn.addEventListener("click", () => {
+                document.querySelectorAll("#parkingFilters .filter-btn").forEach(b => b.classList.remove("active"));
+                btn.classList.add("active");
+                activeParkingMode = btn.dataset.park;
+                renderSideList();
+            });
+        });
+
+        document.querySelectorAll("#hazardFilters .filter-btn").forEach(btn => {
+            btn.addEventListener("click", () => {
+                document.querySelectorAll("#hazardFilters .filter-btn").forEach(b => b.classList.remove("active"));
+                btn.classList.add("active");
+                activeSeverity = btn.dataset.sev;
+                renderSideList();
+            });
+        });
+
+        document.getElementById("searchInput").addEventListener("input", e => {
+            searchQuery = e.target.value;
+            renderSideList();
+        });
+
+        document.getElementById("searchInput").addEventListener("keydown", e => {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                searchCordilleraOnline();
+            }
+        });
+
+        document.getElementById("findOnlineBtn").addEventListener("click", searchCordilleraOnline);
+
+        const modal = document.getElementById("reportModal");
+        document.getElementById("openReportBtn").addEventListener("click", () => modal.classList.add("open"));
+        document.getElementById("closeModalBtn").addEventListener("click", () => modal.classList.remove("open"));
+        modal.addEventListener("click", e => {
+            if (e.target === modal) modal.classList.remove("open");
+        });
+
+        document.getElementById("reportForm").addEventListener("submit", e => {
+            e.preventDefault();
+            const province = document.getElementById("hazardProvince").value;
+            const road = document.getElementById("hazardRoad").value.trim();
+            const type = document.getElementById("hazardType").value;
+            const status = document.getElementById("hazardSeverity").value;
+            const spot = document.getElementById("hazardSpot").value.trim();
+            if (!road || !spot) return;
+
+            hazards.unshift({
+                id: Date.now(),
+                province,
+                road,
+                type,
+                spot,
+                status,
+                coords: [...currentPos]
+            });
+
+            renderMapMarkers();
+            renderSideList();
+            playBeep(820);
+            showToast(`Added hazard on ${road} (${province}).`);
+            e.target.reset();
+            modal.classList.remove("open");
+        });
+
+        populateSelects();
+        detectInitialCurrentLocation();
+        renderMapMarkers();
+        renderSideList();
+    </script>
+</body>
+</html>
